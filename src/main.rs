@@ -10,6 +10,13 @@ use crypto::sha2::Sha256;
 
 use std::iter::repeat;
 
+pub fn hkdf(salt: &[u8], ikm: &[u8], okm: &mut [u8]) {
+    let digest = Sha256::new();
+    let prk: &mut [u8] = &mut [0u8; 32];
+    hkdf_extract(digest, salt, ikm, prk);
+    hkdf_expand (digest, prk, "".as_bytes(), okm);
+}
+
 pub fn flip_bits(num: BigUint) -> BigUint {
     return num
         ^ (Pow::pow(
@@ -19,12 +26,8 @@ pub fn flip_bits(num: BigUint) -> BigUint {
 }
 
 fn ikm_to_lamport_sk(ikm: &[u8], salt: &[u8]) -> Vec<Vec<u8>> {
-    let dig = Sha256::new();
-    let prk: &mut [u8] = &mut [0u8; 32];
-    
-    hkdf_extract(dig, salt, ikm, prk);
     let mut okm: Vec<u8> = repeat(0).take(8160).collect();
-    hkdf_expand(dig, prk, "".as_bytes(), &mut okm);
+    hkdf(salt, ikm, &mut okm);
     let mut ret_v: Vec<Vec<u8>> = Vec::new();
     for r in 0..255 {
         ret_v.push(Vec::new());
