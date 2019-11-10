@@ -127,4 +127,20 @@ mod test {
 
         assert_eq!(expected_pk, pk);
     }
+
+    #[test]
+    fn test_2334() {
+        let orig_pk = BigUint::from_str_radix(
+            "12513733877922233913083619867448865075222526338446857121953625441395088009793",
+            10,
+        ).unwrap();        
+        let paths = path_to_node(String::from("m/5/3/1726/0"));
+        let mut prev = orig_pk;
+        for path in paths {
+            // println!(path);
+            let next = derive_child(prev.clone(), path);
+            assert_ne!(next, prev);
+            prev = next;
+        }
+    }
 }
