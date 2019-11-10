@@ -3,6 +3,7 @@ extern crate num_bigint as bigint;
 extern crate num_traits;
 use bigint::{BigUint, ToBigUint};
 use num_traits::Pow;
+use num_traits::Num;
 
 use crypto::digest::Digest;
 use crypto::hkdf::{hkdf_expand, hkdf_extract};
@@ -64,6 +65,24 @@ pub fn parent_sk_to_lamport_pk(parent_sk: BigUint, index: BigUint) -> Vec<u8> {
     return cmp_pk.to_vec();
 }
 
+pub fn hkdf_mod_r(ikm: &[u8]) -> BigUint {
+    let mut okm: Vec<u8> = repeat(0).take(8160).collect();
+    hkdf("BLS-SIG-KEYGEN-SALT-".as_bytes(), ikm, &mut okm);
+    let r = BigUint::from_str_radix("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", 16).unwrap();
+    return BigUint::from_bytes_be(okm.as_ref()) % r;
+}
+
+pub fn derive_child(parent_sk: BigUint, index: BigUint) -> BigUint {
+    let lamp_pk = parent_sk_to_lamport_pk(parent_sk, index);
+    return hkdf_mod_r(lamp_pk.as_ref());
+}
+
+pub fn derive_master_sk(seed: &[u8]) -> BigUint {
+    assert_eq!(true, seed.len() >= 16);
+    return hkdf_mod_r(seed);
+}
+
+
 fn main() {}
 
 #[cfg(test)]
@@ -75,31 +94,23 @@ mod test {
 
     #[test]
     fn test_2333() {
-        let master_sk = match BigUint::from_str_radix(
+        let seed = hex::decode("c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04").unwrap();
+
+        let derived_master_sk = derive_master_sk(seed.as_ref());
+        let master_sk = BigUint::from_str_radix(
             "12513733877922233913083619867448865075222526338446857121953625441395088009793",
             10,
-        ) {
-            Ok(v) => v,
-            Err(e) => {
-                println!("err {}", e);
-                return;
-            }
-        };
+        ).unwrap();
 
-        let child_index = match BigUint::from_u64(0) {
-            Some(v) => v,
-            None => {
-                println!("err");
-                return;
-            }
-        };
+        // assert_eq!(derived_master_sk, master_sk);
+
+        let child_index = BigUint::from_u64(0).unwrap();
         let pk = parent_sk_to_lamport_pk(master_sk, child_index);
         let expected_pk = match hex::decode("672ba456d0257fe01910d3a799c068550e84881c8d441f8f5f833cbd6c1a9356") {
             Ok(v) => v,
             Err(_) => return,
         };
-        // println!("{:?}", expected_pk);
-        // println!("{:?}", pk);
+
         assert_eq!(expected_pk, pk);
     }
 }
