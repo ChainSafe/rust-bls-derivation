@@ -82,6 +82,13 @@ pub fn derive_master_sk(seed: &[u8]) -> BigUint {
     return hkdf_mod_r(seed);
 }
 
+// EIP 2334
+pub fn path_to_node(path: String) -> Vec<BigUint> {
+    let mut parsed: Vec<&str> = path.split('/').collect();
+    assert_eq!(parsed.remove(0), "m");
+    return parsed.iter().map(|node| node.parse::<BigUint>().unwrap()).collect();
+}
+
 
 fn main() {}
 
