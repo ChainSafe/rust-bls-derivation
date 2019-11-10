@@ -66,7 +66,7 @@ pub fn parent_sk_to_lamport_pk(parent_sk: BigUint, index: BigUint) -> Vec<u8> {
 }
 
 pub fn hkdf_mod_r(ikm: &[u8]) -> BigUint {
-    let mut okm: Vec<u8> = repeat(0).take(8160).collect();
+    let mut okm: Vec<u8> = repeat(0).take(48).collect();
     hkdf("BLS-SIG-KEYGEN-SALT-".as_bytes(), ikm, &mut okm);
     let r = BigUint::from_str_radix("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", 16).unwrap();
     return BigUint::from_bytes_be(okm.as_ref()) % r;
@@ -102,7 +102,7 @@ mod test {
             10,
         ).unwrap();
 
-        // assert_eq!(derived_master_sk, master_sk);
+        assert_eq!(derived_master_sk, master_sk);
 
         let child_index = BigUint::from_u64(0).unwrap();
         let pk = parent_sk_to_lamport_pk(master_sk, child_index);
