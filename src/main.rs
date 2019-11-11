@@ -2,23 +2,25 @@ extern crate crypto;
 extern crate num_bigint as bigint;
 extern crate num_traits;
 use bigint::{BigUint, ToBigUint};
-use num_traits::Num;
-use num_traits::Pow;
-
 use crypto::digest::Digest;
 use crypto::hkdf::{hkdf_expand, hkdf_extract};
 use crypto::sha2::Sha256;
+use num_traits::{Num, Pow};
 
 use std::iter::repeat;
 
-pub fn hkdf(salt: &[u8], ikm: &[u8], okm: &mut [u8]) {
+const DIGEST_SIZE: usize = 32;
+const NUM_DIGESTS: usize = 255;
+const OUTPUT_SIZE: usize = DIGEST_SIZE * NUM_DIGESTS;
+
+fn hkdf(salt: &[u8], ikm: &[u8], okm: &mut [u8]) {
     let digest = Sha256::new();
-    let prk: &mut [u8] = &mut [0u8; 32];
+    let prk: &mut [u8] = &mut [0u8; DIGEST_SIZE];
     hkdf_extract(digest, salt, ikm, prk);
-    hkdf_expand(digest, prk, "".as_bytes(), okm);
+    hkdf_expand(digest, prk, b"", okm);
 }
 
-pub fn flip_bits(num: BigUint) -> BigUint {
+fn flip_bits(num: BigUint) -> BigUint {
     return num
         ^ (Pow::pow(
             &ToBigUint::to_biguint(&2).unwrap(),
@@ -26,44 +28,46 @@ pub fn flip_bits(num: BigUint) -> BigUint {
         ) - &ToBigUint::to_biguint(&1).unwrap());
 }
 
-fn ikm_to_lamport_sk(ikm: &[u8], salt: &[u8]) -> Vec<Vec<u8>> {
-    let mut okm: Vec<u8> = repeat(0).take(8160).collect();
+fn ikm_to_lamport_sk(ikm: &[u8], salt: &[u8], split_bytes: &mut[[u8; DIGEST_SIZE]; NUM_DIGESTS]) {
+    let mut okm: Vec<u8> = repeat(0).take(OUTPUT_SIZE).collect();
     hkdf(salt, ikm, &mut okm);
-    // I'm sorry for doing this
-    let mut ret_v: Vec<Vec<u8>> = Vec::new();
-    for r in 0..255 {
-        ret_v.push(Vec::new());
-        for c in 0..32 {
-            ret_v[r].push(okm[r * 32 + c]);
+    let mut i = 0;
+    for r in 0..NUM_DIGESTS {
+        for c in 0..DIGEST_SIZE {
+            split_bytes[r][c] = okm[i];
+            i += 1;
         }
     }
-
-    return ret_v;
 }
 
 pub fn parent_sk_to_lamport_pk(parent_sk: BigUint, index: BigUint) -> Vec<u8> {
-    let mut sha256 = Sha256::new();
     let salt = index.to_bytes_be();
     let ikm = parent_sk.to_bytes_be();
-    let mut lamport_0 = ikm_to_lamport_sk(ikm.as_slice(), salt.as_slice());
+    let mut lamport_0 = [[0u8; DIGEST_SIZE]; NUM_DIGESTS];
+    ikm_to_lamport_sk(ikm.as_slice(), salt.as_slice(), &mut lamport_0);
 
     let not_ikm = flip_bits(parent_sk).to_bytes_be();
-    let mut lamport_1 = ikm_to_lamport_sk(not_ikm.as_slice(), salt.as_slice());
+    let mut lamport_1 = [[0u8; DIGEST_SIZE]; NUM_DIGESTS];
+    ikm_to_lamport_sk(not_ikm.as_slice(), salt.as_slice(), &mut lamport_1);
 
-    lamport_0.append(&mut lamport_1);
-    for sk in &mut lamport_0 {
-        sha256.input(sk.as_slice());
-        // I'm very sorry for this
-        let tmp: &mut [u8] = &mut [0u8; 32];
-        sha256.result(tmp);
-        *sk = tmp.to_vec();
+    // TODO: find better way to combine 2d byte arrays
+    let mut combined = [[0u8; DIGEST_SIZE]; NUM_DIGESTS * 2];
+    for i in 0..NUM_DIGESTS {
+        combined[i] = lamport_0[i];
+        combined[i + NUM_DIGESTS] = lamport_1[i];
+    }
+    let mut sha256 = Sha256::new();
+    let mut flattened_key: Vec<u8> = vec![0u8; OUTPUT_SIZE * 2];
+    for i in 0..NUM_DIGESTS * 2 {
+        let sha_slice = &mut combined[i];
+        sha256.input(sha_slice);
+        sha256.result(sha_slice);
         sha256.reset();
+        flattened_key[i * DIGEST_SIZE..(i + 1) * DIGEST_SIZE].clone_from_slice(sha_slice);
     }
 
-    let compressed_pk = lamport_0.into_iter().flatten().collect::<Vec<u8>>();
-    sha256.input(compressed_pk.as_slice());
-    // I know, I apologize
-    let cmp_pk: &mut [u8] = &mut [0u8; 32];
+    sha256.input(flattened_key.as_slice());
+    let cmp_pk: &mut [u8] = &mut [0u8; DIGEST_SIZE];
     sha256.result(cmp_pk);
     return cmp_pk.to_vec();
 }
@@ -93,9 +97,11 @@ pub fn derive_master_sk(seed: &[u8]) -> BigUint {
 pub fn path_to_node(path: String) -> Vec<BigUint> {
     let mut parsed: Vec<&str> = path.split('/').collect();
     assert_eq!(parsed.remove(0), "m");
-    return parsed.iter().map(|node| node.parse::<BigUint>().unwrap()).collect();
+    return parsed
+        .iter()
+        .map(|node| node.parse::<BigUint>().unwrap())
+        .collect();
 }
-
 
 fn main() {}
 
@@ -133,7 +139,8 @@ mod test {
         let orig_pk = BigUint::from_str_radix(
             "12513733877922233913083619867448865075222526338446857121953625441395088009793",
             10,
-        ).unwrap();        
+        )
+        .unwrap();
         let paths = path_to_node(String::from("m/5/3/1726/0"));
         let mut prev = orig_pk;
         for path in paths {
