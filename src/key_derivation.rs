@@ -40,7 +40,7 @@ fn ikm_to_lamport_sk(ikm: &[u8], salt: &[u8], split_bytes: &mut [[u8; DIGEST_SIZ
     }
 }
 
-pub fn parent_sk_to_lamport_pk(parent_sk: BigUint, index: BigUint) -> Vec<u8> {
+fn parent_sk_to_lamport_pk(parent_sk: BigUint, index: BigUint) -> Vec<u8> {
     let salt = index.to_bytes_be();
     let ikm = parent_sk.to_bytes_be();
     let mut lamport_0 = [[0u8; DIGEST_SIZE]; NUM_DIGESTS];
@@ -73,7 +73,7 @@ pub fn parent_sk_to_lamport_pk(parent_sk: BigUint, index: BigUint) -> Vec<u8> {
     return cmp_pk.to_vec();
 }
 
-pub fn hkdf_mod_r(ikm: &[u8]) -> BigUint {
+fn hkdf_mod_r(ikm: &[u8]) -> BigUint {
     let mut okm: Vec<u8> = repeat(0).take(48).collect();
     hkdf("BLS-SIG-KEYGEN-SALT-".as_bytes(), ikm, &mut okm);
     let r = BigUint::from_str_radix(
