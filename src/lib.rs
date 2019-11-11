@@ -1,1 +1,3 @@
-pub mod key_derivation;
+mod key_derivation;
+
+pub use key_derivation::*;
