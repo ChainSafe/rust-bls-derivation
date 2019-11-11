@@ -56,7 +56,6 @@ fn parent_sk_to_lamport_pk(parent_sk: BigUint, index: BigUint) -> Vec<u8> {
         combined[i] = lamport_0[i];
         combined[i + NUM_DIGESTS] = lamport_1[i];
     }
-    
     let mut sha256 = Sha256::new();
     let mut flattened_key: Vec<u8> = vec![0u8; OUTPUT_SIZE * 2];
     for i in 0..NUM_DIGESTS * 2 {
@@ -89,27 +88,39 @@ pub fn derive_child(parent_sk: BigUint, index: BigUint) -> BigUint {
     return hkdf_mod_r(lamp_pk.as_ref());
 }
 
-pub fn derive_master_sk(seed: &[u8]) -> BigUint {
-    assert_eq!(true, seed.len() >= 16);
-    return hkdf_mod_r(seed);
+pub fn derive_master_sk(seed: &[u8]) -> Result<BigUint, String> {
+    if seed.len() < 16 {
+        return Err("seed must be greater than or equal to 16 bytes".to_string());
+    }
+
+    return Ok(hkdf_mod_r(seed));
 }
 
 // EIP 2334
-pub fn path_to_node(path: String) -> Vec<BigUint> {
+pub fn path_to_node(path: String) -> Result<Vec<BigUint>, String> {
     let mut parsed: Vec<&str> = path.split('/').collect();
-    assert_eq!(parsed.remove(0), "m");
-    return parsed
-        .iter()
-        .map(|node| node.parse::<BigUint>().unwrap())
-        .collect();
+    let m = parsed.remove(0);
+    if m != "m" {
+        return Err(format!("First value must be m, got {}", m));
+    }
+
+    let mut ret: Vec<BigUint> = vec![];
+    for value in parsed {
+        match value.parse::<BigUint>() {
+            Ok(v) => ret.push(v),
+            Err(_) => return Err(format!("could not parse value: {}", value)),
+        }
+    }
+
+    Ok(ret)
 }
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use super::bigint::BigUint;
-    use num_traits::{FromPrimitive, Num};
+    use super::*;
     use hex;
+    use num_traits::{FromPrimitive, Num};
 
     struct TestVector {
         seed: &'static str,
@@ -148,12 +159,21 @@ mod test {
                 );
 
         for t in test_vectors.iter() {
-            let seed = hex::decode(t.seed).unwrap();
-            let master_sk = BigUint::from_str_radix(t.master_sk, 10).unwrap();
-            let child_index = BigUint::from_str_radix(t.child_index, 10).unwrap();
-            let child_sk = BigUint::from_str_radix(t.child_sk, 10).unwrap();
+            let seed = hex::decode(t.seed).expect("invalid seed format");
+            let master_sk = t
+                .master_sk
+                .parse::<BigUint>()
+                .expect("invalid master key format");
+            let child_index = t
+                .child_index
+                .parse::<BigUint>()
+                .expect("invalid index format");
+            let child_sk = t
+                .child_sk
+                .parse::<BigUint>()
+                .expect("invalid child key format");
 
-            let derived_master_sk = derive_master_sk(seed.as_ref());
+            let derived_master_sk = derive_master_sk(seed.as_ref()).unwrap();
             assert_eq!(derived_master_sk, master_sk);
             let pk = derive_child(master_sk, child_index);
             assert_eq!(child_sk, pk);
@@ -167,14 +187,19 @@ mod test {
             10,
         )
         .unwrap();
-        let paths = path_to_node(String::from("m/5/3/1726/0"));
+        let invalid_path = path_to_node(String::from("m/a/3s/1726/0"));
+        invalid_path.expect_err("This path should be invalid");
+        let invalid_path = path_to_node(String::from("1/2"));
+        invalid_path.expect_err("Path must include a m");
+        let invalid_path = path_to_node(String::from("m"));
+        assert_eq!(invalid_path.unwrap(), vec![]);
+        let paths = path_to_node(String::from("m/5/3/1726/0")).unwrap();
         let mut prev = orig_pk.clone();
         for path in paths {
             let next = derive_child(prev.clone(), path);
             assert_ne!(next, prev);
             prev = next;
         }
-        
         let mut other = orig_pk.clone();
         other = derive_child(other.clone(), BigUint::from_u64(5).unwrap());
         other = derive_child(other.clone(), BigUint::from_u64(3).unwrap());
