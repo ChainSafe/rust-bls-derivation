@@ -7,8 +7,6 @@ use crypto::hkdf::{hkdf_expand, hkdf_extract};
 use crypto::sha2::Sha256;
 use num_traits::{Num, Pow};
 
-use std::iter::repeat;
-
 const DIGEST_SIZE: usize = 32;
 const NUM_DIGESTS: usize = 255;
 const OUTPUT_SIZE: usize = DIGEST_SIZE * NUM_DIGESTS;
@@ -29,7 +27,7 @@ fn flip_bits(num: BigUint) -> BigUint {
 }
 
 fn ikm_to_lamport_sk(ikm: &[u8], salt: &[u8], split_bytes: &mut [[u8; DIGEST_SIZE]; NUM_DIGESTS]) {
-    let mut okm: Vec<u8> = repeat(0).take(OUTPUT_SIZE).collect();
+    let mut okm = [0u8; OUTPUT_SIZE];
     hkdf(salt, ikm, &mut okm);
     let mut i = 0;
     for r in 0..NUM_DIGESTS {
@@ -59,7 +57,7 @@ fn parent_sk_to_lamport_pk(parent_sk: BigUint, index: BigUint) -> Vec<u8> {
     let mut sha256 = Sha256::new();
     let mut flattened_key: Vec<u8> = vec![0u8; OUTPUT_SIZE * 2];
     for i in 0..NUM_DIGESTS * 2 {
-        let sha_slice = &mut combined[i];
+        let sha_slice = &mut combined[i];   
         sha256.input(sha_slice);
         sha256.result(sha_slice);
         sha256.reset();
@@ -73,7 +71,7 @@ fn parent_sk_to_lamport_pk(parent_sk: BigUint, index: BigUint) -> Vec<u8> {
 }
 
 fn hkdf_mod_r(ikm: &[u8]) -> BigUint {
-    let mut okm: Vec<u8> = repeat(0).take(48).collect();
+    let mut okm = [0u8; 48];
     hkdf("BLS-SIG-KEYGEN-SALT-".as_bytes(), ikm, &mut okm);
     let r = BigUint::from_str_radix(
         "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001",
