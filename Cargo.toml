@@ -9,5 +9,5 @@ edition = "2018"
 [dependencies]
 rust-crypto = "0.2"
 num-bigint = "0.2.3"
-num-traits = "*"
+num-traits = "0.2.8"
 hex = "0.3.1"
