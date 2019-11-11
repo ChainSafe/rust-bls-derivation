@@ -28,7 +28,7 @@ fn flip_bits(num: BigUint) -> BigUint {
         ) - &ToBigUint::to_biguint(&1).unwrap());
 }
 
-fn ikm_to_lamport_sk(ikm: &[u8], salt: &[u8], split_bytes: &mut[[u8; DIGEST_SIZE]; NUM_DIGESTS]) {
+fn ikm_to_lamport_sk(ikm: &[u8], salt: &[u8], split_bytes: &mut [[u8; DIGEST_SIZE]; NUM_DIGESTS]) {
     let mut okm: Vec<u8> = repeat(0).take(OUTPUT_SIZE).collect();
     hkdf(salt, ikm, &mut okm);
     let mut i = 0;
@@ -56,6 +56,7 @@ pub fn parent_sk_to_lamport_pk(parent_sk: BigUint, index: BigUint) -> Vec<u8> {
         combined[i] = lamport_0[i];
         combined[i + NUM_DIGESTS] = lamport_1[i];
     }
+    
     let mut sha256 = Sha256::new();
     let mut flattened_key: Vec<u8> = vec![0u8; OUTPUT_SIZE * 2];
     for i in 0..NUM_DIGESTS * 2 {
@@ -103,35 +104,60 @@ pub fn path_to_node(path: String) -> Vec<BigUint> {
         .collect();
 }
 
-fn main() {}
-
 #[cfg(test)]
 mod test {
-    use crate::num_traits::{FromPrimitive, Num};
-    use crate::*;
-    use bigint::BigUint;
+    use super::*;
+    use super::bigint::BigUint;
+    use num_traits::{FromPrimitive, Num};
     use hex;
+
+    struct TestVector {
+        seed: &'static str,
+        master_sk: &'static str,
+        child_index: &'static str,
+        child_sk: &'static str,
+    }
 
     #[test]
     fn test_2333() {
-        let seed = hex::decode("c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04").unwrap();
+        let test_vectors = vec!(
+                    TestVector{
+                        seed : "c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04",
+                        master_sk : "12513733877922233913083619867448865075222526338446857121953625441395088009793",
+                        child_index : "0",
+                        child_sk : "7419543105316279183937430842449358701327973165530407166294956473095303972104",
+                    },
+                    // TestVector{
+                    //     seed: "3141592653589793238462643383279502884197169399375105820974944592",
+                    //     master_sk: "46029459550803682895343812821003080589696405386150182061394330539196052371668",
+                    //     child_index: "3141592653589793238462643383279502884197169399375105820974944592",
+                    //     child_sk: "52355059779601818323170390700812190085791545700943775185630512585202016942671",
+                    // },
+                    TestVector{
+                        seed: "0099FF991111002299DD7744EE3355BBDD8844115566CC55663355668888CC00",
+                        master_sk: "45379166311535261329029945990467475187325618028073620882733843918126031931161",
+                        child_index: "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+                        child_sk: "3001977934078166987926353732839098506754809480904566732795462937312900783942",
+                    },
+                    TestVector{
+                        seed: "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+                        master_sk: "8591296517642752610571443601667923790682754368613740552668934360711284428110",
+                        child_index: "96295644508963302359223866841007920022480890644992946816264522587871600414627",
+                        child_sk: "18992511018606881439236209510845138630250367286140373438339392563268870207242",
+                    }
+                );
 
-        let derived_master_sk = derive_master_sk(seed.as_ref());
-        let master_sk = BigUint::from_str_radix(
-            "12513733877922233913083619867448865075222526338446857121953625441395088009793",
-            10,
-        )
-        .unwrap();
+        for t in test_vectors.iter() {
+            let seed = hex::decode(t.seed).unwrap();
+            let master_sk = BigUint::from_str_radix(t.master_sk, 10).unwrap();
+            let child_index = BigUint::from_str_radix(t.child_index, 10).unwrap();
+            let child_sk = BigUint::from_str_radix(t.child_sk, 10).unwrap();
 
-        assert_eq!(derived_master_sk, master_sk);
-
-        let child_index = BigUint::from_u64(0).unwrap();
-        let pk = parent_sk_to_lamport_pk(master_sk, child_index);
-        let expected_pk =
-            hex::decode("672ba456d0257fe01910d3a799c068550e84881c8d441f8f5f833cbd6c1a9356")
-                .unwrap();
-
-        assert_eq!(expected_pk, pk);
+            let derived_master_sk = derive_master_sk(seed.as_ref());
+            assert_eq!(derived_master_sk, master_sk);
+            let pk = derive_child(master_sk, child_index);
+            assert_eq!(child_sk, pk);
+        }
     }
 
     #[test]
@@ -142,12 +168,19 @@ mod test {
         )
         .unwrap();
         let paths = path_to_node(String::from("m/5/3/1726/0"));
-        let mut prev = orig_pk;
+        let mut prev = orig_pk.clone();
         for path in paths {
-            // println!(path);
             let next = derive_child(prev.clone(), path);
             assert_ne!(next, prev);
             prev = next;
         }
+        
+        let mut other = orig_pk.clone();
+        other = derive_child(other.clone(), BigUint::from_u64(5).unwrap());
+        other = derive_child(other.clone(), BigUint::from_u64(3).unwrap());
+        other = derive_child(other.clone(), BigUint::from_u64(1726).unwrap());
+        assert_ne!(prev, other);
+        other = derive_child(other.clone(), BigUint::from_u64(0).unwrap());
+        assert_eq!(prev, other)
     }
 }

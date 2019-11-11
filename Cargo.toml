@@ -1,5 +1,5 @@
 [package]
-name = "blseip"
+name = "bls_key_derivation"
 version = "0.1.0"
 authors = ["austinabell <austinabell8@gmail.com>"]
 edition = "2018"
