@@ -55,7 +55,7 @@ fn parent_sk_to_lamport_pk(parent_sk: BigUint, index: BigUint) -> Vec<u8> {
         combined[i + NUM_DIGESTS] = lamport_1[i];
     }
     let mut sha256 = Sha256::new();
-    let mut flattened_key: Vec<u8> = vec![0u8; OUTPUT_SIZE * 2];
+    let mut flattened_key = [0u8; OUTPUT_SIZE * 2];
     for i in 0..NUM_DIGESTS * 2 {
         let sha_slice = &mut combined[i];   
         sha256.input(sha_slice);
@@ -64,7 +64,7 @@ fn parent_sk_to_lamport_pk(parent_sk: BigUint, index: BigUint) -> Vec<u8> {
         flattened_key[i * DIGEST_SIZE..(i + 1) * DIGEST_SIZE].clone_from_slice(sha_slice);
     }
 
-    sha256.input(flattened_key.as_slice());
+    sha256.input(&flattened_key);
     let cmp_pk: &mut [u8] = &mut [0u8; DIGEST_SIZE];
     sha256.result(cmp_pk);
     return cmp_pk.to_vec();
@@ -185,11 +185,11 @@ mod test {
             10,
         )
         .unwrap();
-        let invalid_path = path_to_node(String::from("m/a/3s/1726/0"));
+        let  mut invalid_path = path_to_node(String::from("m/a/3s/1726/0"));
         invalid_path.expect_err("This path should be invalid");
-        let invalid_path = path_to_node(String::from("1/2"));
+        invalid_path = path_to_node(String::from("1/2"));
         invalid_path.expect_err("Path must include a m");
-        let invalid_path = path_to_node(String::from("m"));
+        invalid_path = path_to_node(String::from("m"));
         assert_eq!(invalid_path.unwrap(), vec![]);
         let paths = path_to_node(String::from("m/5/3/1726/0")).unwrap();
         let mut prev = orig_pk.clone();
