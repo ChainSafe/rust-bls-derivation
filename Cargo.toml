@@ -1,6 +1,6 @@
 [package]
 name = "bls_key_derivation"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["austinabell <austinabell8@gmail.com>"]
 edition = "2018"
 description = "BLS key derivation"
