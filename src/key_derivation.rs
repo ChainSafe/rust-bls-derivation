@@ -19,20 +19,19 @@ fn hkdf(salt: &[u8], ikm: &[u8], okm: &mut [u8]) {
 }
 
 fn flip_bits(num: BigUint) -> BigUint {
-    return num
-        ^ (Pow::pow(
-            &ToBigUint::to_biguint(&2).unwrap(),
-            &ToBigUint::to_biguint(&256).unwrap(),
-        ) - &ToBigUint::to_biguint(&1).unwrap());
+    num ^ (Pow::pow(
+        &ToBigUint::to_biguint(&2).unwrap(),
+        &ToBigUint::to_biguint(&256).unwrap(),
+    ) - &ToBigUint::to_biguint(&1).unwrap())
 }
 
 fn ikm_to_lamport_sk(ikm: &[u8], salt: &[u8], split_bytes: &mut [[u8; DIGEST_SIZE]; NUM_DIGESTS]) {
     let mut okm = [0u8; OUTPUT_SIZE];
     hkdf(salt, ikm, &mut okm);
     let mut i = 0;
-    for r in 0..NUM_DIGESTS {
-        for c in 0..DIGEST_SIZE {
-            split_bytes[r][c] = okm[i];
+    for row in split_bytes.iter_mut().take(NUM_DIGESTS) {
+        for c in row.iter_mut().take(DIGEST_SIZE) {
+            *c = okm[i];
             i += 1;
         }
     }
@@ -48,16 +47,14 @@ fn parent_sk_to_lamport_pk(parent_sk: BigUint, index: BigUint) -> Vec<u8> {
     let mut lamport_1 = [[0u8; DIGEST_SIZE]; NUM_DIGESTS];
     ikm_to_lamport_sk(not_ikm.as_slice(), salt.as_slice(), &mut lamport_1);
 
-    // TODO: find better way to combine 2d byte arrays
     let mut combined = [[0u8; DIGEST_SIZE]; NUM_DIGESTS * 2];
-    for i in 0..NUM_DIGESTS {
-        combined[i] = lamport_0[i];
-        combined[i + NUM_DIGESTS] = lamport_1[i];
-    }
+    combined[..NUM_DIGESTS].clone_from_slice(&lamport_0[..NUM_DIGESTS]);
+    combined[NUM_DIGESTS..NUM_DIGESTS * 2].clone_from_slice(&lamport_1[..NUM_DIGESTS]);
+
     let mut sha256 = Sha256::new();
     let mut flattened_key = [0u8; OUTPUT_SIZE * 2];
     for i in 0..NUM_DIGESTS * 2 {
-        let sha_slice = &mut combined[i];   
+        let sha_slice = &mut combined[i];
         sha256.input(sha_slice);
         sha256.result(sha_slice);
         sha256.reset();
@@ -67,23 +64,23 @@ fn parent_sk_to_lamport_pk(parent_sk: BigUint, index: BigUint) -> Vec<u8> {
     sha256.input(&flattened_key);
     let cmp_pk: &mut [u8] = &mut [0u8; DIGEST_SIZE];
     sha256.result(cmp_pk);
-    return cmp_pk.to_vec();
+    cmp_pk.to_vec()
 }
 
 fn hkdf_mod_r(ikm: &[u8]) -> BigUint {
     let mut okm = [0u8; 48];
-    hkdf("BLS-SIG-KEYGEN-SALT-".as_bytes(), ikm, &mut okm);
+    hkdf(b"BLS-SIG-KEYGEN-SALT-", ikm, &mut okm);
     let r = BigUint::from_str_radix(
         "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001",
         16,
     )
     .unwrap();
-    return BigUint::from_bytes_be(okm.as_ref()) % r;
+    BigUint::from_bytes_be(okm.as_ref()) % r
 }
 
 pub fn derive_child(parent_sk: BigUint, index: BigUint) -> BigUint {
     let lamp_pk = parent_sk_to_lamport_pk(parent_sk, index);
-    return hkdf_mod_r(lamp_pk.as_ref());
+    hkdf_mod_r(lamp_pk.as_ref())
 }
 
 pub fn derive_master_sk(seed: &[u8]) -> Result<BigUint, String> {
@@ -91,7 +88,7 @@ pub fn derive_master_sk(seed: &[u8]) -> Result<BigUint, String> {
         return Err("seed must be greater than or equal to 16 bytes".to_string());
     }
 
-    return Ok(hkdf_mod_r(seed));
+    Ok(hkdf_mod_r(seed))
 }
 
 // EIP 2334
@@ -185,7 +182,7 @@ mod test {
             10,
         )
         .unwrap();
-        let  mut invalid_path = path_to_node(String::from("m/a/3s/1726/0"));
+        let mut invalid_path = path_to_node(String::from("m/a/3s/1726/0"));
         invalid_path.expect_err("This path should be invalid");
         invalid_path = path_to_node(String::from("1/2"));
         invalid_path.expect_err("Path must include a m");
