@@ -28,12 +28,8 @@ fn flip_bits(num: BigUint) -> BigUint {
 fn ikm_to_lamport_sk(ikm: &[u8], salt: &[u8], split_bytes: &mut [[u8; DIGEST_SIZE]; NUM_DIGESTS]) {
     let mut okm = [0u8; OUTPUT_SIZE];
     hkdf(salt, ikm, &mut okm);
-    let mut i = 0;
-    for row in split_bytes.iter_mut().take(NUM_DIGESTS) {
-        for c in row.iter_mut().take(DIGEST_SIZE) {
-            *c = okm[i];
-            i += 1;
-        }
+    for r in 0..NUM_DIGESTS {
+        split_bytes[r].copy_from_slice(&okm[r * DIGEST_SIZE..(r + 1) * DIGEST_SIZE])
     }
 }
 
