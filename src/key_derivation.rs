@@ -1,11 +1,11 @@
 extern crate crypto;
 extern crate num_bigint as bigint;
 extern crate num_traits;
-use bigint::{BigUint, ToBigUint};
+use bigint::BigUint;
 use crypto::digest::Digest;
 use crypto::hkdf::{hkdf_expand, hkdf_extract};
 use crypto::sha2::Sha256;
-use num_traits::{Num, Pow};
+use num_traits::{Num, Pow, FromPrimitive};
 
 const DIGEST_SIZE: usize = 32;
 const NUM_DIGESTS: usize = 255;
@@ -20,9 +20,9 @@ fn hkdf(salt: &[u8], ikm: &[u8], okm: &mut [u8]) {
 
 fn flip_bits(num: BigUint) -> BigUint {
     num ^ (Pow::pow(
-        &ToBigUint::to_biguint(&2).unwrap(),
-        &ToBigUint::to_biguint(&256).unwrap(),
-    ) - &ToBigUint::to_biguint(&1).unwrap())
+        &BigUint::from_u64(2).unwrap(),
+        &BigUint::from_u64(256).unwrap(),
+    ) - &BigUint::from_u64(1).unwrap())
 }
 
 fn ikm_to_lamport_sk(ikm: &[u8], salt: &[u8], split_bytes: &mut [[u8; DIGEST_SIZE]; NUM_DIGESTS]) {
