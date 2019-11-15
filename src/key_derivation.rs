@@ -5,7 +5,7 @@ use bigint::BigUint;
 use crypto::digest::Digest;
 use crypto::hkdf::{hkdf_expand, hkdf_extract};
 use crypto::sha2::Sha256;
-use num_traits::{Num, Pow, FromPrimitive};
+use num_traits::{FromPrimitive, Num, Pow};
 
 const DIGEST_SIZE: usize = 32;
 const NUM_DIGESTS: usize = 255;
